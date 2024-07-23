@@ -45,11 +45,11 @@ def is_valid_quote(quote):
 
 def remove_duplicates(quotes):
     """Elimina citas duplicadas basadas en el texto y el autor."""
-    seen = set()
-    unique_quotes = []
+    seen = set()     #Crea un conjunto vacío llamado seen. En Python, un conjunto (set) es una colección desordenada de elementos únicos. Se utiliza para realizar búsquedas rápidas y garantizar que no haya duplicados.
+    unique_quotes = []   
     for quote in quotes:
-        identifier = (quote['text'], quote['author'])
-        if identifier not in seen:
+        identifier = (quote['text'], quote['author'])   #Para cada cita, se crea una tupla identifier que contiene el texto de la cita y el autor. Esta tupla se utiliza como una representación única de cada cita basada en su contenido.
+        if identifier not in seen:  #Comprueba si identifier (la tupla con el texto y el autor de la cita) ya está en el conjunto seen. Si no está en seen, significa que esta combinación de texto y autor aún no ha sido procesada.
             seen.add(identifier)
             unique_quotes.append(quote)
     return unique_quotes
