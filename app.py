@@ -35,6 +35,26 @@ def get_author_info(author_url):
                                                                           #.text.strip(): Extrae el texto del elemento <div> y elimina los espacios en blanco al principio y al final del texto.
     return author_info
 
+def clean_text(text):
+    """Limpia el texto eliminando espacios adicionales y saltos de línea."""
+    return text.strip().replace('\n', ' ').replace('\r', '')
+
+def is_valid_quote(quote):
+    """Valida que una cita tenga texto y autor."""
+    return bool(quote['text']) and bool(quote['author'])
+
+def remove_duplicates(quotes):
+    """Elimina citas duplicadas basadas en el texto y el autor."""
+    seen = set()
+    unique_quotes = []
+    for quote in quotes:
+        identifier = (quote['text'], quote['author'])
+        if identifier not in seen:
+            seen.add(identifier)
+            unique_quotes.append(quote)
+    return unique_quotes
+
+
 def main():
     all_quotes = []
     url = BASE_URL + '/page/1/'
@@ -42,7 +62,20 @@ def main():
     while url:
         quotes, next_page_url = get_quotes_from_page(url)   #Llama a la función get_quotes_from_page pasando la URL actual. Esta función debería devolver dos cosas: quotes: Una lista de citas obtenidas de la página actual. y next_page_url: La URL de la siguiente página, si existe.
         all_quotes.extend(quotes)           #Agrega las citas obtenidas a la lista all_quotes.
+
+        # Limpiar y validar citas
+        for quote in quotes:
+            quote['text'] = clean_text(quote['text'])
+            quote['author'] = clean_text(quote['author'])
+            quote['tags'] = [clean_text(tag) for tag in quote['tags']]
+            if is_valid_quote(quote):
+                all_quotes.append(quote)
+
+
         url = BASE_URL + next_page_url if next_page_url else None
+
+    # Eliminar duplicados
+    all_quotes = remove_duplicates(all_quotes)
     
     for quote in all_quotes:
         author_url = '/author/' + '-'.join(quote['author'].split()) + '/' #Construye la URL del autor. quote['author']: Obtiene el nombre del autor de la cita. quote['author'].split(): Divide el nombre del autor en una lista de palabras (suponiendo que el nombre está separado por espacios).
