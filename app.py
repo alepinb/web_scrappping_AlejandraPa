@@ -3,6 +3,18 @@ from bs4 import BeautifulSoup
 import sqlite3
 from models import db, Quote
 from flask import Flask
+import logging
+
+# Configuración del logging
+logging.basicConfig(
+    level=logging.INFO,  # Puedes cambiar a DEBUG para más detalles
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('app.log'),  # Guardar logs en un archivo
+        logging.StreamHandler()           # También mostrar logs en la consola
+    ]
+)
+
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///quotes.db'
@@ -11,6 +23,7 @@ db.init_app(app)
 BASE_URL = "https://quotes.toscrape.com"
 
 def get_quotes_from_page(url):
+    logging.info(f"Requesting URL: {url}")
     response = requests.get(url)   #se hace una petición HTTP GET a la URL proporcionada usando la biblioteca requests. La respuesta contiene el código HTML de la página solicitada.
     soup = BeautifulSoup(response.text, 'html.parser')   #Analiza el contenido HTML obtenido y crea un objeto BeautifulSoup que se puede usar para buscar y extraer datos del HTML de manera eficiente
     
@@ -33,9 +46,11 @@ Cada diccionario en la lista quotes contiene la información completa de una cit
     next_page = soup.find('li', class_='next')   #buscar el primer elemento <li> que tenga la clase next en el documento HTML analizado. Este elemento <li> generalmente contiene el enlace a la siguiente página de citas.
     next_page_url = next_page.find('a')['href'] if next_page else None  #busca el primer elemento <a> dentro del elemento <li> encontrado previamente (next_page). Este elemento <a> representa el enlace a la siguiente página. 
                                                                         #['href'] accede al atributo href del elemento <a>, que contiene la URL relativa de la siguiente página.
+    logging.info(f"Next page URL: {next_page_url}")
     return quotes, next_page_url
 
 def get_author_info(author_url):
+    logging.info(f"Requesting author info from URL: {BASE_URL + author_url}")
     response = requests.get(BASE_URL + author_url)  #Realiza una solicitud HTTP GET a la URL completa para obtener la página web del autor.
     soup = BeautifulSoup(response.text, 'html.parser')    #Utiliza BeautifulSoup para analizar el contenido HTML de la respuesta. response.text contiene el HTML de la página, y 'html.parser' es el analizador que se usa para interpretar el HTML.
     author_info = soup.find('div', class_='author-details').text.strip()  #Busca un elemento <div> en el HTML con la clase 'author-details', que se supone contiene la información del autor.
@@ -89,6 +104,8 @@ def get_all_quotes():
                                                                           # Finalmente, se añade '/author/' al principio y '/ al final para construir la URL completa del autor.
         quote['author_info'] = get_author_info(author_url)                # Llama a la función get_author_info con la URL del autor y guarda la información del autor en el campo 'author_info' de la cita.
     
+    logging.info(f"Retrieved {len(all_quotes)} quotes.")
+
     # Imprimir las citas obtenidas
     for quote in all_quotes:
         print(f"Frase: {quote['text']}")
@@ -101,6 +118,7 @@ def get_all_quotes():
     return all_quotes
 
 def insert_quotes_to_db(quotes):
+    logging.info("Inserting quotes into database.")
     for quote in quotes:
         tags = ', '.join(quote['tags'])
         new_quote = Quote(
@@ -111,14 +129,18 @@ def insert_quotes_to_db(quotes):
         )
         db.session.add(new_quote)
     db.session.commit()
+    logging.info("Quotes successfully inserted into the database.")
    
 if __name__ == "__main__":
     with app.app_context():
+        logging.info("Initializing application context...")
         print("Iniciando el contexto de la aplicación...")
         db.create_all()  # Crear las tablas en la base de datos si no existen
+        logging.info("Tables created in the database.")
         print("Tablas creadas en la base de datos.")
         all_quotes = get_all_quotes()
         print(f"Se obtuvieron {len(all_quotes)} citas.")
         insert_quotes_to_db(all_quotes)
         print("Citas insertadas en la base de datos.")
+        logging.info("Script finished successfully.")
     
