@@ -1,5 +1,12 @@
 import requests
 from bs4 import BeautifulSoup
+import sqlite3
+from models import db, Quote
+from flask import Flask
+
+app = Flask(__name__)
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///quotes.db'
+db.init_app(app)
 
 BASE_URL = "https://quotes.toscrape.com"
 
@@ -54,14 +61,14 @@ def remove_duplicates(quotes):
             unique_quotes.append(quote)
     return unique_quotes
 
-
-def main():
+def get_all_quotes():
+    """Obtiene todas las citas de todas las páginas"""
     all_quotes = []
     url = BASE_URL + '/page/1/'
     
     while url:
-        quotes, next_page_url = get_quotes_from_page(url)   #Llama a la función get_quotes_from_page pasando la URL actual. Esta función debería devolver dos cosas: quotes: Una lista de citas obtenidas de la página actual. y next_page_url: La URL de la siguiente página, si existe.
-        all_quotes.extend(quotes)           #Agrega las citas obtenidas a la lista all_quotes.
+        quotes, next_page_url = get_quotes_from_page(url)   # Llama a la función get_quotes_from_page pasando la URL actual. Esta función debería devolver dos cosas: quotes: Una lista de citas obtenidas de la página actual. y next_page_url: La URL de la siguiente página, si existe.
+        all_quotes.extend(quotes)           # Agrega las citas obtenidas a la lista all_quotes.
 
         # Limpiar y validar citas
         for quote in quotes:
@@ -71,19 +78,18 @@ def main():
             if is_valid_quote(quote):
                 all_quotes.append(quote)
 
-
         url = BASE_URL + next_page_url if next_page_url else None
 
     # Eliminar duplicados
     all_quotes = remove_duplicates(all_quotes)
     
     for quote in all_quotes:
-        author_url = '/author/' + '-'.join(quote['author'].split()) + '/' #Construye la URL del autor. quote['author']: Obtiene el nombre del autor de la cita. quote['author'].split(): Divide el nombre del autor en una lista de palabras (suponiendo que el nombre está separado por espacios).
+        author_url = '/author/' + '-'.join(quote['author'].split()) + '/' # Construye la URL del autor. quote['author']: Obtiene el nombre del autor de la cita. quote['author'].split(): Divide el nombre del autor en una lista de palabras (suponiendo que el nombre está separado por espacios).
                                                                           # '-'.join(...): Une las palabras con guiones (-) para formar la parte de la URL correspondiente al autor.
                                                                           # Finalmente, se añade '/author/' al principio y '/ al final para construir la URL completa del autor.
         quote['author_info'] = get_author_info(author_url)                # Llama a la función get_author_info con la URL del autor y guarda la información del autor en el campo 'author_info' de la cita.
     
-    # Imprimir o guardar las citas obtenidas
+    # Imprimir las citas obtenidas
     for quote in all_quotes:
         print(f"Frase: {quote['text']}")
         print(f"Autor: {quote['author']}")
@@ -91,5 +97,28 @@ def main():
         print(f"Info Autor: {quote['author_info']}")
         print('-' * 80)
 
+
+    return all_quotes
+
+def insert_quotes_to_db(quotes):
+    for quote in quotes:
+        tags = ', '.join(quote['tags'])
+        new_quote = Quote(
+            text=quote['text'],
+            author=quote['author'],
+            tags=tags,
+            author_info=quote['author_info']
+        )
+        db.session.add(new_quote)
+    db.session.commit()
+   
 if __name__ == "__main__":
-    main()
+    with app.app_context():
+        print("Iniciando el contexto de la aplicación...")
+        db.create_all()  # Crear las tablas en la base de datos si no existen
+        print("Tablas creadas en la base de datos.")
+        all_quotes = get_all_quotes()
+        print(f"Se obtuvieron {len(all_quotes)} citas.")
+        insert_quotes_to_db(all_quotes)
+        print("Citas insertadas en la base de datos.")
+    

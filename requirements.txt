@@ -3,3 +3,9 @@ requests
 beautifulsoup4
 
 sqlite3
+
+sqlAlchemy
+
+flask_sqlalchemy
+
+flask
