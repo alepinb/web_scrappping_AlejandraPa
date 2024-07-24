@@ -1,1 +1,11 @@
- 
+# Ignorar archivos de log
+*.log
+
+# Ignorar archivos de base de datos SQLite
+*.db
+instance/
+
+# Otros archivos
+*.pyc
+__pycache__/
+
