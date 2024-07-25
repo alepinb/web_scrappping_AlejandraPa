@@ -82,8 +82,3 @@ Funciones para limpiar el texto, validar citas y eliminar duplicados.
 #### 6. **Interfaz de Usuario con Streamlit**
 
 Una interfaz sencilla para mostrar citas aleatorias mediante Streamlit.
-
-
-
-
-
