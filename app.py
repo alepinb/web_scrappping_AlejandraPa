@@ -28,7 +28,7 @@ SESSION = requests.Session()
 
 def get_quotes_from_page(url):
     logging.info(f"Requesting URL: {url}")
-    response = SESSION.get(url)   # OPTIMIZACIÓN: Usar la sesión global en lugar de requests.get()
+    response = SESSION.get(url)   #Usar la sesión global
     soup = BeautifulSoup(response.text, 'html.parser')
     
     quotes = []
@@ -38,7 +38,7 @@ def get_quotes_from_page(url):
         author = quote_div.find('small', class_='author').text
         tags = [tag.text for tag in quote_div.find_all('a', class_='tag')]
         quotes.append({
-            'text': clean_text(text),  # OPTIMIZACIÓN: Limpiar el texto inmediatamente
+            'text': clean_text(text),  
             'author': clean_text(author),
             'tags': [clean_text(tag) for tag in tags]
         })
@@ -50,14 +50,14 @@ def get_quotes_from_page(url):
 
 def get_author_info(author_url):
     logging.info(f"Requesting author info from URL: {BASE_URL + author_url}")
-    response = SESSION.get(BASE_URL + author_url)  # OPTIMIZACIÓN: Usar la sesión global
+    response = SESSION.get(BASE_URL + author_url)  
     soup = BeautifulSoup(response.text, 'html.parser')
     author_info = soup.find('div', class_='author-details').text.strip()
-    return clean_text(author_info)  # OPTIMIZACIÓN: Limpiar el texto inmediatamente
+    return clean_text(author_info)  
 
 def clean_text(text):
     """Limpia el texto eliminando espacios adicionales y saltos de línea."""
-    # OPTIMIZACIÓN: Simplificar la función de limpieza
+    
     return ' '.join(text.strip().split())
 
 def is_valid_quote(quote):
@@ -88,7 +88,7 @@ def get_all_quotes():
     # Eliminar duplicados
     all_quotes = remove_duplicates(all_quotes)
     
-    # OPTIMIZACIÓN: Usar ThreadPoolExecutor para obtener información de autores concurrentemente
+    #Usar ThreadPoolExecutor para obtener información de autores concurrentemente
     with ThreadPoolExecutor(max_workers=10) as executor:
         future_to_quote = {executor.submit(get_author_info, '/author/' + '-'.join(quote['author'].split()) + '/'): quote for quote in all_quotes}
         for future in as_completed(future_to_quote):
@@ -106,7 +106,6 @@ def insert_quotes_to_db(quotes):
     logging.info("Inserting quotes into database.")
     start_time = time.time()
     
-    # OPTIMIZACIÓN: Usar una única transacción para todas las inserciones
     with app.app_context():
         db.session.begin()
         try:
@@ -130,13 +129,13 @@ def insert_quotes_to_db(quotes):
     logging.info(f"Quotes successfully inserted into the database. Time taken: {end_time - start_time:.2f} seconds")
 
 def fetch_quote():
-    response = SESSION.get(BASE_URL + '/random')  # OPTIMIZACIÓN: Usar la sesión global
+    response = SESSION.get(BASE_URL + '/random')  
     if response.status_code == 200:
         soup = BeautifulSoup(response.text, 'html.parser')
         quote_div = soup.find('div', class_='quote')
         text = quote_div.find('span', class_='text').text
         author = quote_div.find('small', class_='author').text
-        return {'text': clean_text(text), 'author': clean_text(author)}  # OPTIMIZACIÓN: Limpiar el texto inmediatamente
+        return {'text': clean_text(text), 'author': clean_text(author)} 
     return None
     
 def streamlit_app():
