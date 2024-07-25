@@ -28,36 +28,52 @@ SESSION = requests.Session()
 
 def get_quotes_from_page(url):
     logging.info(f"Requesting URL: {url}")
-    response = SESSION.get(url)   #Usar la sesión global
-    soup = BeautifulSoup(response.text, 'html.parser')
-    
-    quotes = []
+    try:
+        response = SESSION.get(url)  # Usar la sesión global
+        response.raise_for_status()  # Lanza una excepción para códigos de estado HTTP 4xx/5xx
+        soup = BeautifulSoup(response.text, 'html.parser')
+        
+        quotes = []
 
-    for quote_div in soup.find_all('div', class_='quote'):
-        text = quote_div.find('span', class_='text').text
-        author = quote_div.find('small', class_='author').text
-        tags = [tag.text for tag in quote_div.find_all('a', class_='tag')]
-        quotes.append({
-            'text': clean_text(text),  
-            'author': clean_text(author),
-            'tags': [clean_text(tag) for tag in tags]
-        })
-    
-    next_page = soup.find('li', class_='next')
-    next_page_url = next_page.find('a')['href'] if next_page else None
-    logging.info(f"Next page URL: {next_page_url}")
-    return quotes, next_page_url
+        for quote_div in soup.find_all('div', class_='quote'):
+            try:
+                text = quote_div.find('span', class_='text').text
+                author = quote_div.find('small', class_='author').text
+                tags = [tag.text for tag in quote_div.find_all('a', class_='tag')]
+                quotes.append({
+                    'text': clean_text(text),  # OPTIMIZACIÓN: Limpiar el texto inmediatamente
+                    'author': clean_text(author),
+                    'tags': [clean_text(tag) for tag in tags]
+                })
+            except AttributeError as e:
+                logging.error(f"Error processing quote div: {e}")
+        
+        next_page = soup.find('li', class_='next')
+        next_page_url = next_page.find('a')['href'] if next_page else None
+        logging.info(f"Next page URL: {next_page_url}")
+        return quotes, next_page_url
+    except requests.RequestException as e:
+        logging.error(f"Error requesting URL {url}: {e}")
+        return [], None
 
 def get_author_info(author_url):
     logging.info(f"Requesting author info from URL: {BASE_URL + author_url}")
-    response = SESSION.get(BASE_URL + author_url)  
-    soup = BeautifulSoup(response.text, 'html.parser')
-    author_info = soup.find('div', class_='author-details').text.strip()
-    return clean_text(author_info)  
+    try:
+        response = SESSION.get(BASE_URL + author_url)  # Usar la sesión global
+        response.raise_for_status()
+        soup = BeautifulSoup(response.text, 'html.parser')
+        author_info = soup.find('div', class_='author-details').text.strip()
+        return clean_text(author_info)  # OPTIMIZACIÓN: Limpiar el texto inmediatamente
+    except requests.RequestException as e:
+        logging.error(f"Error requesting author info URL {BASE_URL + author_url}: {e}")
+        return None
+    except AttributeError as e:
+        logging.error(f"Error processing author info page: {e}")
+        return None
 
 def clean_text(text):
     """Limpia el texto eliminando espacios adicionales y saltos de línea."""
-    
+    # OPTIMIZACIÓN: Simplificar la función de limpieza
     return ' '.join(text.strip().split())
 
 def is_valid_quote(quote):
@@ -88,7 +104,7 @@ def get_all_quotes():
     # Eliminar duplicados
     all_quotes = remove_duplicates(all_quotes)
     
-    #Usar ThreadPoolExecutor para obtener información de autores concurrentemente
+    # Usar ThreadPoolExecutor para obtener información de autores concurrentemente
     with ThreadPoolExecutor(max_workers=10) as executor:
         future_to_quote = {executor.submit(get_author_info, '/author/' + '-'.join(quote['author'].split()) + '/'): quote for quote in all_quotes}
         for future in as_completed(future_to_quote):
@@ -106,6 +122,7 @@ def insert_quotes_to_db(quotes):
     logging.info("Inserting quotes into database.")
     start_time = time.time()
     
+    # Usar una única transacción para todas las inserciones
     with app.app_context():
         db.session.begin()
         try:
@@ -129,15 +146,21 @@ def insert_quotes_to_db(quotes):
     logging.info(f"Quotes successfully inserted into the database. Time taken: {end_time - start_time:.2f} seconds")
 
 def fetch_quote():
-    response = SESSION.get(BASE_URL + '/random')  
-    if response.status_code == 200:
+    try:
+        response = SESSION.get(BASE_URL + '/random')  # Usar la sesión global
+        response.raise_for_status()
         soup = BeautifulSoup(response.text, 'html.parser')
         quote_div = soup.find('div', class_='quote')
         text = quote_div.find('span', class_='text').text
         author = quote_div.find('small', class_='author').text
-        return {'text': clean_text(text), 'author': clean_text(author)} 
-    return None
-    
+        return {'text': clean_text(text), 'author': clean_text(author)}  # OPTIMIZACIÓN: Limpiar el texto inmediatamente
+    except requests.RequestException as e:
+        logging.error(f"Error requesting random quote: {e}")
+        return None
+    except AttributeError as e:
+        logging.error(f"Error processing random quote page: {e}")
+        return None
+
 def streamlit_app():
     st.title("Quotes App")
     st.write("Esta aplicación muestra citas.")
