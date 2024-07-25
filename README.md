@@ -9,7 +9,7 @@ Quotes App es una aplicación para obtener, procesar y mostrar citas célebres d
 - Python 3.6 o superior
 - pip (gestor de paquetes de Python)
 
-Clonar el repositorio
+### Clonar el repositorio
 ```bash
 git clone https://github.com/tuusuario/quotes-app.git
 cd quotes-app
