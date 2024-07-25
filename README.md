@@ -9,9 +9,7 @@ Quotes App es una aplicación para obtener, procesar y mostrar citas célebres d
 - Python 3.6 o superior
 - pip (gestor de paquetes de Python)
 
-### Pasos a seguir
-
-### Clonar el repositorio
+Clonar el repositorio
 ```bash
 git clone https://github.com/tuusuario/quotes-app.git
 cd quotes-app
@@ -27,7 +25,6 @@ pip install -r requirements.txt
 flask db init
 flask db migrate -m "Inicializar base de datos"
 flask db upgrade
-
 
 ### Ejecutar la aplicación
 python app.py
@@ -48,7 +45,6 @@ quotes-app/
 ├── requirements.txt   # Dependencias del proyecto
 ├── app.log            # Archivo de log de la aplicación
 └── README.md          # Este archivo
-
 
 ### Autores
 Alejandra Piñango - Desarrollador Principal - (https://github.com/alepinb)
