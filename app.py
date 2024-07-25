@@ -1,9 +1,11 @@
 import requests
 from bs4 import BeautifulSoup
-import sqlite3
 from models import db, Quote
 from flask import Flask
 import logging
+import streamlit as st
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import time
 
 # Configuración del logging
 logging.basicConfig(
@@ -15,51 +17,64 @@ logging.basicConfig(
     ]
 )
 
-
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///quotes.db'
 db.init_app(app)
 
 BASE_URL = "https://quotes.toscrape.com"
 
+# OPTIMIZACIÓN: Crear una sesión global para reutilizar conexiones HTTP
+SESSION = requests.Session()
+
 def get_quotes_from_page(url):
     logging.info(f"Requesting URL: {url}")
-    response = requests.get(url)   #se hace una petición HTTP GET a la URL proporcionada usando la biblioteca requests. La respuesta contiene el código HTML de la página solicitada.
-    soup = BeautifulSoup(response.text, 'html.parser')   #Analiza el contenido HTML obtenido y crea un objeto BeautifulSoup que se puede usar para buscar y extraer datos del HTML de manera eficiente
-    
-    quotes = [] #Esta lista se usará para almacenar diccionarios que contienen información sobre cada cita encontrada en la página.
+    try:
+        response = SESSION.get(url)  # Usar la sesión global
+        response.raise_for_status()  # Lanza una excepción para códigos de estado HTTP 4xx/5xx
+        soup = BeautifulSoup(response.text, 'html.parser')
+        
+        quotes = []
 
-    for quote_div in soup.find_all('div', class_='quote'):    #encuentra todos los elementos <div> que tienen la clase quote. En cada iteración, el elemento se almacena en la variable quote_div.
-        text = quote_div.find('span', class_='text').text     #busca el primer elemento <span> con la clase text dentro del quote_div. .text extrae el contenido de texto de este elemento <span>, que es la cita en sí.
-        author = quote_div.find('small', class_='author').text #busca el primer elemento <small> con la clase author. .text saca el contenido de texto de este elemento <small>
-        tags = [tag.text for tag in quote_div.find_all('a', class_='tag')]  #busca todos los elementos <a> con la clase tag dentro del quote_div. La expresión [tag.text for tag in quote_div.find_all('a', class_='tag')] es una lista por comprensión que itera sobre cada elemento <a> encontrado y extrae su contenido de texto (tag.text).
-        quotes.append({
-            'text': text,
-            'author': author,
-            'tags': tags
-        })
-
-    """El fragmento de código de arriba recorre todas las citas en una página web (representadas por elementos <div> con la clase quote), 
-extrae el texto de la cita, el nombre del autor y las etiquetas asociadas, y almacena esta información en una lista de diccionarios. 
-Cada diccionario en la lista quotes contiene la información completa de una cita"""
-    
-    next_page = soup.find('li', class_='next')   #buscar el primer elemento <li> que tenga la clase next en el documento HTML analizado. Este elemento <li> generalmente contiene el enlace a la siguiente página de citas.
-    next_page_url = next_page.find('a')['href'] if next_page else None  #busca el primer elemento <a> dentro del elemento <li> encontrado previamente (next_page). Este elemento <a> representa el enlace a la siguiente página. 
-                                                                        #['href'] accede al atributo href del elemento <a>, que contiene la URL relativa de la siguiente página.
-    logging.info(f"Next page URL: {next_page_url}")
-    return quotes, next_page_url
+        for quote_div in soup.find_all('div', class_='quote'):
+            try:
+                text = quote_div.find('span', class_='text').text
+                author = quote_div.find('small', class_='author').text
+                tags = [tag.text for tag in quote_div.find_all('a', class_='tag')]
+                quotes.append({
+                    'text': clean_text(text),  # OPTIMIZACIÓN: Limpiar el texto inmediatamente
+                    'author': clean_text(author),
+                    'tags': [clean_text(tag) for tag in tags]
+                })
+            except AttributeError as e:
+                logging.error(f"Error processing quote div: {e}")
+        
+        next_page = soup.find('li', class_='next')
+        next_page_url = next_page.find('a')['href'] if next_page else None
+        logging.info(f"Next page URL: {next_page_url}")
+        return quotes, next_page_url
+    except requests.RequestException as e:
+        logging.error(f"Error requesting URL {url}: {e}")
+        return [], None
 
 def get_author_info(author_url):
     logging.info(f"Requesting author info from URL: {BASE_URL + author_url}")
-    response = requests.get(BASE_URL + author_url)  #Realiza una solicitud HTTP GET a la URL completa para obtener la página web del autor.
-    soup = BeautifulSoup(response.text, 'html.parser')    #Utiliza BeautifulSoup para analizar el contenido HTML de la respuesta. response.text contiene el HTML de la página, y 'html.parser' es el analizador que se usa para interpretar el HTML.
-    author_info = soup.find('div', class_='author-details').text.strip()  #Busca un elemento <div> en el HTML con la clase 'author-details', que se supone contiene la información del autor.
-                                                                          #.text.strip(): Extrae el texto del elemento <div> y elimina los espacios en blanco al principio y al final del texto.
-    return author_info
+    try:
+        response = SESSION.get(BASE_URL + author_url)  # Usar la sesión global
+        response.raise_for_status()
+        soup = BeautifulSoup(response.text, 'html.parser')
+        author_info = soup.find('div', class_='author-details').text.strip()
+        return clean_text(author_info)  # OPTIMIZACIÓN: Limpiar el texto inmediatamente
+    except requests.RequestException as e:
+        logging.error(f"Error requesting author info URL {BASE_URL + author_url}: {e}")
+        return None
+    except AttributeError as e:
+        logging.error(f"Error processing author info page: {e}")
+        return None
 
 def clean_text(text):
     """Limpia el texto eliminando espacios adicionales y saltos de línea."""
-    return text.strip().replace('\n', ' ').replace('\r', '')
+    # OPTIMIZACIÓN: Simplificar la función de limpieza
+    return ' '.join(text.strip().split())
 
 def is_valid_quote(quote):
     """Valida que una cita tenga texto y autor."""
@@ -67,11 +82,11 @@ def is_valid_quote(quote):
 
 def remove_duplicates(quotes):
     """Elimina citas duplicadas basadas en el texto y el autor."""
-    seen = set()     #Crea un conjunto vacío llamado seen. En Python, un conjunto (set) es una colección desordenada de elementos únicos. Se utiliza para realizar búsquedas rápidas y garantizar que no haya duplicados.
-    unique_quotes = []   
+    seen = set()
+    unique_quotes = []
     for quote in quotes:
-        identifier = (quote['text'], quote['author'])   #Para cada cita, se crea una tupla identifier que contiene el texto de la cita y el autor. Esta tupla se utiliza como una representación única de cada cita basada en su contenido.
-        if identifier not in seen:  #Comprueba si identifier (la tupla con el texto y el autor de la cita) ya está en el conjunto seen. Si no está en seen, significa que esta combinación de texto y autor aún no ha sido procesada.
+        identifier = (quote['text'], quote['author'])
+        if identifier not in seen:
             seen.add(identifier)
             unique_quotes.append(quote)
     return unique_quotes
@@ -82,55 +97,82 @@ def get_all_quotes():
     url = BASE_URL + '/page/1/'
     
     while url:
-        quotes, next_page_url = get_quotes_from_page(url)   # Llama a la función get_quotes_from_page pasando la URL actual. Esta función debería devolver dos cosas: quotes: Una lista de citas obtenidas de la página actual. y next_page_url: La URL de la siguiente página, si existe.
-        all_quotes.extend(quotes)           # Agrega las citas obtenidas a la lista all_quotes.
-
-        # Limpiar y validar citas
-        for quote in quotes:
-            quote['text'] = clean_text(quote['text'])
-            quote['author'] = clean_text(quote['author'])
-            quote['tags'] = [clean_text(tag) for tag in quote['tags']]
-            if is_valid_quote(quote):
-                all_quotes.append(quote)
-
+        quotes, next_page_url = get_quotes_from_page(url)
+        all_quotes.extend(quotes)
         url = BASE_URL + next_page_url if next_page_url else None
 
     # Eliminar duplicados
     all_quotes = remove_duplicates(all_quotes)
     
-    for quote in all_quotes:
-        author_url = '/author/' + '-'.join(quote['author'].split()) + '/' # Construye la URL del autor. quote['author']: Obtiene el nombre del autor de la cita. quote['author'].split(): Divide el nombre del autor en una lista de palabras (suponiendo que el nombre está separado por espacios).
-                                                                          # '-'.join(...): Une las palabras con guiones (-) para formar la parte de la URL correspondiente al autor.
-                                                                          # Finalmente, se añade '/author/' al principio y '/ al final para construir la URL completa del autor.
-        quote['author_info'] = get_author_info(author_url)                # Llama a la función get_author_info con la URL del autor y guarda la información del autor en el campo 'author_info' de la cita.
+    # Usar ThreadPoolExecutor para obtener información de autores concurrentemente
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        future_to_quote = {executor.submit(get_author_info, '/author/' + '-'.join(quote['author'].split()) + '/'): quote for quote in all_quotes}
+        for future in as_completed(future_to_quote):
+            quote = future_to_quote[future]
+            try:
+                quote['author_info'] = future.result()
+            except Exception as exc:
+                logging.error(f'Error getting author info for {quote["author"]}: {exc}')
+                quote['author_info'] = None
     
     logging.info(f"Retrieved {len(all_quotes)} quotes.")
-
-    # Imprimir las citas obtenidas
-    for quote in all_quotes:
-        print(f"Frase: {quote['text']}")
-        print(f"Autor: {quote['author']}")
-        print(f"Tags: {', '.join(quote['tags'])}")
-        print(f"Info Autor: {quote['author_info']}")
-        print('-' * 80)
-
-
     return all_quotes
 
 def insert_quotes_to_db(quotes):
     logging.info("Inserting quotes into database.")
-    for quote in quotes:
-        tags = ', '.join(quote['tags'])
-        new_quote = Quote(
-            text=quote['text'],
-            author=quote['author'],
-            tags=tags,
-            author_info=quote['author_info']
-        )
-        db.session.add(new_quote)
-    db.session.commit()
-    logging.info("Quotes successfully inserted into the database.")
-   
+    start_time = time.time()
+    
+    # Usar una única transacción para todas las inserciones
+    with app.app_context():
+        db.session.begin()
+        try:
+            for quote in quotes:
+                tags = ', '.join(quote['tags'])
+                new_quote = Quote(
+                    text=quote['text'],
+                    author=quote['author'],
+                    tags=tags,
+                    author_info=quote['author_info']
+                )
+                db.session.add(new_quote)
+            db.session.commit()
+        except Exception as e:
+            db.session.rollback()
+            logging.error(f"Error inserting quotes: {e}")
+        finally:
+            db.session.close()
+    
+    end_time = time.time()
+    logging.info(f"Quotes successfully inserted into the database. Time taken: {end_time - start_time:.2f} seconds")
+
+def fetch_quote():
+    try:
+        response = SESSION.get(BASE_URL + '/random')  # Usar la sesión global
+        response.raise_for_status()
+        soup = BeautifulSoup(response.text, 'html.parser')
+        quote_div = soup.find('div', class_='quote')
+        text = quote_div.find('span', class_='text').text
+        author = quote_div.find('small', class_='author').text
+        return {'text': clean_text(text), 'author': clean_text(author)}  # OPTIMIZACIÓN: Limpiar el texto inmediatamente
+    except requests.RequestException as e:
+        logging.error(f"Error requesting random quote: {e}")
+        return None
+    except AttributeError as e:
+        logging.error(f"Error processing random quote page: {e}")
+        return None
+
+def streamlit_app():
+    st.title("Quotes App")
+    st.write("Esta aplicación muestra citas.")
+
+    if st.button("Obtener una cita aleatoria"):
+        quote = fetch_quote()
+        if quote:
+            st.write(f"Frase: {quote['text']}")
+            st.write(f"Autor: {quote['author']}")
+        else:
+            st.write("No se pudo obtener una cita.")
+  
 if __name__ == "__main__":
     with app.app_context():
         logging.info("Initializing application context...")
@@ -143,4 +185,6 @@ if __name__ == "__main__":
         insert_quotes_to_db(all_quotes)
         print("Citas insertadas en la base de datos.")
         logging.info("Script finished successfully.")
-    
+
+    # Ejecutar la aplicación de Streamlit
+    streamlit_app()
