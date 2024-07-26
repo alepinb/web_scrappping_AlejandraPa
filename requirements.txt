@@ -1,11 +1,13 @@
-requests
+requests==2.32.3
 
-beautifulsoup4
+beautifulsoup4==4.12.3
 
-sqlAlchemy
+SQLAlchemy==2.0.31
 
-flask_sqlalchemy
+Flask-SQLAlchemy==3.1.1
 
-flask
+flask==3.0.3
 
-streamlit
+streamlit==1.36.0
+
+Python==3.12.4
