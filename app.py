@@ -9,11 +9,11 @@ import time
 
 # Configuración del logging
 logging.basicConfig(
-    level=logging.INFO,  # Puedes cambiar a DEBUG para más detalles
+    level=logging.INFO,  # se puede cambiar a DEBUG para más detalles
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
         logging.FileHandler('app.log'),  # Guardar logs en un archivo
-        logging.StreamHandler()           # También mostrar logs en la consola
+        logging.StreamHandler()           # Mostrar logs en la consola
     ]
 )
 
@@ -23,7 +23,7 @@ db.init_app(app)
 
 BASE_URL = "https://quotes.toscrape.com"
 
-# OPTIMIZACIÓN: Crear una sesión global para reutilizar conexiones HTTP
+# Crear una sesión global para reutilizar conexiones HTTP
 SESSION = requests.Session()
 
 def get_quotes_from_page(url):
@@ -41,7 +41,7 @@ def get_quotes_from_page(url):
                 author = quote_div.find('small', class_='author').text
                 tags = [tag.text for tag in quote_div.find_all('a', class_='tag')]
                 quotes.append({
-                    'text': clean_text(text),  # OPTIMIZACIÓN: Limpiar el texto inmediatamente
+                    'text': clean_text(text),  #Limpiar el texto inmediatamente
                     'author': clean_text(author),
                     'tags': [clean_text(tag) for tag in tags]
                 })
@@ -51,6 +51,10 @@ def get_quotes_from_page(url):
         next_page = soup.find('li', class_='next')
         next_page_url = next_page.find('a')['href'] if next_page else None
         logging.info(f"Next page URL: {next_page_url}")
+
+        for quote in quotes:  #imprimir citas en la consola
+            print(quote)
+
         return quotes, next_page_url
     except requests.RequestException as e:
         logging.error(f"Error requesting URL {url}: {e}")
@@ -63,7 +67,7 @@ def get_author_info(author_url):
         response.raise_for_status()
         soup = BeautifulSoup(response.text, 'html.parser')
         author_info = soup.find('div', class_='author-details').text.strip()
-        return clean_text(author_info)  # OPTIMIZACIÓN: Limpiar el texto inmediatamente
+        return clean_text(author_info)  # Limpiar el texto
     except requests.RequestException as e:
         logging.error(f"Error requesting author info URL {BASE_URL + author_url}: {e}")
         return None
@@ -73,7 +77,6 @@ def get_author_info(author_url):
 
 def clean_text(text):
     """Limpia el texto eliminando espacios adicionales y saltos de línea."""
-    # OPTIMIZACIÓN: Simplificar la función de limpieza
     return ' '.join(text.strip().split())
 
 def is_valid_quote(quote):
@@ -122,7 +125,6 @@ def insert_quotes_to_db(quotes):
     logging.info("Inserting quotes into database.")
     start_time = time.time()
     
-    # Usar una única transacción para todas las inserciones
     with app.app_context():
         db.session.begin()
         try:
@@ -153,7 +155,7 @@ def fetch_quote():
         quote_div = soup.find('div', class_='quote')
         text = quote_div.find('span', class_='text').text
         author = quote_div.find('small', class_='author').text
-        return {'text': clean_text(text), 'author': clean_text(author)}  # OPTIMIZACIÓN: Limpiar el texto inmediatamente
+        return {'text': clean_text(text), 'author': clean_text(author)}  # Limpiar el texto 
     except requests.RequestException as e:
         logging.error(f"Error requesting random quote: {e}")
         return None
